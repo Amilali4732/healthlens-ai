@@ -1,4 +1,5 @@
-import ReportAnalyzer from "@/components/ReportAnalyzer";
+"use client";
+import ReportAnalyzer from "../components/ReportAnalyzer";
 
 export default function Home(){
   return <>
