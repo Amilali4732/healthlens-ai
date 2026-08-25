@@ -1,72 +1,177 @@
 "use client";
 
-import { useRef, useState } from "react";
-
-type FileItem = { file: File; id: string };
+import { useState } from "react";
 
 export default function ReportAnalyzer() {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [files,setFiles] = useState<FileItem[]>([]);
-  const [name,setName] = useState("");
-  const [age,setAge] = useState("");
-  const [conditions,setConditions] = useState("");
-  const [loading,setLoading] = useState(false);
-  const [analyzed,setAnalyzed] = useState(false);
+  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
+  const [conditions, setConditions] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  function addFiles(list: FileList | null) {
-    if (!list) return;
-    const allowed=["application/pdf","image/jpeg","image/png"];
-    const next=[...list].filter(f=>allowed.includes(f.type)).map(file=>({file,id:crypto.randomUUID()}));
-    setFiles(prev=>[...prev,...next]);
+  function handleFiles(selectedFiles: FileList | null) {
+    if (!selectedFiles) return;
+
+    setFiles((previous) => [
+      ...previous,
+      ...Array.from(selectedFiles),
+    ]);
   }
 
-  function removeFile(id:string){setFiles(prev=>prev.filter(x=>x.id!==id));}
-
-  async function analyze(){
-    if(!name.trim() || !age || !files.length) return;
-    setLoading(true); setAnalyzed(false);
-    // TODO: replace demo delay with POST /api/analyze-report.
-    await new Promise(r=>setTimeout(r,1200));
-    setLoading(false); setAnalyzed(true);
+  function removeFile(index: number) {
+    setFiles((previous) =>
+      previous.filter((_, fileIndex) => fileIndex !== index)
+    );
   }
 
-  const ready=Boolean(name.trim() && age && files.length);
+  async function handleSubmit() {
+    if (!name || !age || files.length === 0) {
+      setMessage("Please enter patient details and upload a report.");
+      return;
+    }
 
-  return <div className="card">
-    <div className="grid">
-      <div className="field"><label>Patient name *</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. John Smith"/></div>
-      <div className="field"><label>Age *</label><input value={age} onChange={e=>setAge(e.target.value)} type="number" min="0" max="120" placeholder="Age"/></div>
-    </div>
+    setLoading(true);
+    setMessage("");
 
-    <div className="field">
-      <label>Known diseases or health conditions</label>
-      <textarea value={conditions} onChange={e=>setConditions(e.target.value)} placeholder="Example: diabetes, hypertension, asthma. Leave empty if none are known."/>
-      <div className="hint">This information will provide context to the future AI analysis.</div>
-    </div>
+    try {
+      const formData = new FormData();
 
-    <div className="field">
-      <label>Medical report *</label>
-      <label className="upload" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();addFiles(e.dataTransfer.files)}} htmlFor="report-files">
-        <div style={{fontSize:30}}>📄</div><b>Choose PDF or image files</b>
-        <div className="hint">PDF, JPG, JPEG, PNG</div>
-        <input id="report-files" ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onChange={e=>addFiles(e.target.files)}/>
-      </label>
-      <div className="files">{files.map(x=><div className="file" key={x.id}><span>📄 {x.file.name}</span><button type="button" onClick={()=>removeFile(x.id)}>×</button></div>)}</div>
-    </div>
+      formData.append("name", name);
+      formData.append("age", age);
+      formData.append("conditions", conditions);
 
-    <button className="btn analyze" disabled={!ready || loading} onClick={analyze}>{loading ? "Reading report…" : "✦ Analyze My Report"}</button>
+      files.forEach((file) => {
+        formData.append("files", file);
+      });
 
-    {loading && <div className="loading">Extracting report information and preparing a patient-friendly explanation…</div>}
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        body: formData,
+      });
 
-    {analyzed && <div className="result">
-      <div className="summary"><b>Report prepared for {name}, age {age}.</b><br/><small>Prototype response. Connect the API route to generate real report-specific analysis.</small></div>
-      <div className="results">
-        <div className="box full"><h3>🧠 What does the report say?</h3><p>The production AI will extract exact test names, values, units and reference ranges and explain each result in simple language.</p></div>
-        <div className="box"><h3>🔎 Important findings</h3><ul><li>Exact abnormal or notable results.</li><li>Plain-language explanations.</li><li>Comparison with stated reference ranges.</li></ul></div>
-        <div className="box warn"><h3>💡 Precautions</h3><ul><li>Discuss results outside the stated range with your clinician.</li><li>Do not change medication based only on AI output.</li><li>Keep older reports for trend comparison.</li></ul></div>
-        <div className="box full"><h3>🩺 Questions for your doctor</h3><p>The production AI will generate questions based on actual findings and patient context.</p></div>
-        <div className="box danger full"><h3>⚠️ Medical notice</h3><p>This tool is educational and does not diagnose or replace a healthcare professional. Severe or urgent symptoms require appropriate medical care.</p></div>
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Analysis failed");
+      }
+
+      setMessage("Report analyzed successfully!");
+      console.log(data);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="analyzer-card">
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor="patient-name">Patient Name *</label>
+          <input
+            id="patient-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter patient name"
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="patient-age">Age *</label>
+          <input
+            id="patient-age"
+            type="number"
+            min="0"
+            max="120"
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            placeholder="Enter age"
+          />
+        </div>
       </div>
-    </div>}
-  </div>;
+
+      <div className="field">
+        <label htmlFor="conditions">
+          Known Diseases / Health Conditions
+        </label>
+
+        <textarea
+          id="conditions"
+          value={conditions}
+          onChange={(e) => setConditions(e.target.value)}
+          placeholder="Optional — for example: diabetes, high blood pressure, asthma..."
+        />
+      </div>
+
+      <div className="field">
+        <label>Upload Medical Report *</label>
+
+        <label className="upload-area">
+          <span className="upload-icon">📄</span>
+          <strong>Upload your report</strong>
+          <span>PDF, JPG, or PNG · You can select multiple files</span>
+
+          <input
+            className="file-input"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            multiple
+            onChange={(e) => handleFiles(e.target.files)}
+          />
+        </label>
+      </div>
+
+      {files.length > 0 && (
+        <div className="selected-files">
+          <h4>Selected files</h4>
+
+          {files.map((file, index) => (
+            <div className="selected-file" key={`${file.name}-${index}`}>
+              <span>📎 {file.name}</span>
+
+              <button
+                type="button"
+                onClick={() => removeFile(index)}
+                aria-label={`Remove ${file.name}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        className="analyze-button"
+        onClick={handleSubmit}
+        disabled={loading}
+        type="button"
+      >
+        {loading ? "AI is analyzing your report..." : "✦ Analyze My Report"}
+      </button>
+
+      {message && (
+        <div
+          className={
+            message.includes("successfully")
+              ? "form-message success"
+              : "form-message error"
+          }
+        >
+          {message}
+        </div>
+      )}
+
+      <p className="privacy-note">
+        🔒 Your information should only be processed securely. This prototype
+        does not provide a medical diagnosis.
+      </p>
+    </div>
+  );
 }
